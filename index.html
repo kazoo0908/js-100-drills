@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS & API 100 Drills with Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 250px;
+            max-height: 300px;
+        }
+        body {
+            background-color: #fafaf9;
+            color: #292524;
+        }
+        .code-editor {
+            font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, 'Courier New', monospace;
+            tab-size: 4;
+            resize: none;
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            color: #e2e8f0;
+            padding: 1rem;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            border-radius: 1rem;
+            box-shadow: 0 12px 30px rgba(15, 23, 42, 0.35);
+            line-height: 1.5;
+            min-height: 320px;
+        }
+        .code-editor:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.7), 0 12px 30px rgba(15, 23, 42, 0.35);
+        }
+        .code-editor::-webkit-scrollbar {
+            width: 10px;
+        }
+        .code-editor::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.3);
+            border-radius: 9999px;
+            border: 2px solid rgba(15, 23, 42, 0.7);
+        }
+        .console-output {
+            font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, 'Courier New', monospace;
+            background-color: #0b1220;
+            color: #cbd5e1;
+            padding: 1rem;
+            border-top: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .modal-overlay {
+            background-color: rgba(28, 25, 23, 0.6);
+            backdrop-filter: blur(4px);
+        }
+    </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Chosen Palette: Stone (Warm Neutral) with Emerald and Blue accents -->
+    <!-- Application Structure Plan: "Interactive Playground" approach. The dashboard provides progress stats. The explorer section lists drills. A new "Practice Mode" modal is introduced, containing a real-time JS executor. This structure allows users to jump from theory (reading the drill) to practice (writing code) without leaving the page, maximizing learning efficiency. -->
+    <!-- Visualization & Content Choices: 1. Goal: Motivate -> Donut Chart (Chart.js) -> Real-time updates as users complete tasks. 2. Goal: Practice -> Code Execution Sandbox -> Custom JS evaluator that intercepts console.log to display output in a UI console. 3. Goal: Navigate -> Filterable Grid -> Tailwind flex/grid. (NO SVG/Mermaid used). -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <header class="bg-stone-900 text-stone-50 p-6 shadow-md sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto flex justify-between items-center flex-wrap gap-4">
+            <div class="flex items-center gap-3">
+                <span class="text-3xl">js</span>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">JS 100本ノック + 実践エディタ</h1>
+                    <p class="text-xs text-stone-400">コードを書いて、その場で実行。</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="hidden sm:block text-right">
+                    <p class="text-xs text-stone-400">進捗状況</p>
+                    <p class="text-sm font-bold"><span id="header-count">0</span> / 100 完了</p>
+                </div>
+                <a href="https://developer.mozilla.org/ja/" target="_blank" class="bg-stone-700 hover:bg-stone-600 px-4 py-2 rounded text-xs transition-colors">MDNで調べる</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto w-full p-4 sm:p-6 lg:p-8 space-y-12">
+        
+        <!-- Dashboard section -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-stone-200">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span>&#128200;</span> カテゴリ別の進捗
+                </h2>
+                <div class="chart-container">
+                    <canvas id="distributionChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-stone-200 flex flex-col items-center justify-center">
+                <h2 class="text-lg font-bold mb-4">全体の達成率</h2>
+                <div class="chart-container w-full h-48">
+                    <canvas id="progressChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Explorer section -->
+        <section>
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+                <div>
+                    <h2 class="text-xl font-bold">問題を選択して練習する</h2>
+                    <p class="text-sm text-stone-500">「練習する」ボタンでエディタが開きます。</p>
+                </div>
+                <div id="filter-container" class="flex flex-wrap gap-2">
+                    <!-- Filters generated by JS -->
+                </div>
+            </div>
+
+            <div id="questions-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Cards generated by JS -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Editor Modal -->
+    <div id="editor-modal" class="fixed inset-0 z-50 modal-overlay hidden flex items-center justify-center p-4">
+        <div class="bg-slate-950 w-full max-w-4xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-800">
+            <!-- Modal Header -->
+            <div class="bg-slate-900 p-4 border-b border-slate-800 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <span id="modal-q-id" class="bg-emerald-500 text-slate-950 text-xs font-bold px-2 py-1 rounded">Q1</span>
+                    <h3 id="modal-q-title" class="font-bold text-slate-100 truncate max-w-[200px] sm:max-w-md">問題のタイトル</h3>
+                </div>
+                <button onclick="closeEditor()" class="text-slate-300 hover:text-slate-100 p-2 text-xl">&times;</button>
+            </div>
+
+            <div class="flex-grow flex flex-col md:flex-row overflow-hidden">
+                <!-- Input Area -->
+                <div class="flex-grow flex flex-col border-r border-stone-700/60 bg-slate-950">
+                    <div class="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-700">
+                        <div class="flex items-center gap-2">
+                            <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-700/60 text-slate-100 text-xs font-bold">JS</span>
+                            <div>
+                                <p class="text-sm font-semibold text-slate-100">JavaScript Editor</p>
+                                <p class="text-[10px] text-slate-400">ここにコードを書いて実行できます</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="runCode()" class="inline-flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-4 py-2 rounded-lg font-semibold text-sm shadow-md ring-1 ring-emerald-200/60 transition">実行</button>
+                            <button onclick="markCurrentAsComplete()" id="complete-shortcut-btn" class="inline-flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-lg font-semibold text-sm ring-1 ring-white/10 transition">完了にする</button>
+                        </div>
+                    </div>
+                    <textarea id="js-input" spellcheck="false" class="flex-grow w-full p-4 code-editor text-sm focus:outline-none" placeholder="// ここにコードを書いてください..."></textarea>
+                </div>
+
+                <!-- Output Area -->
+                <div class="w-full md:w-80 flex flex-col bg-slate-950 overflow-hidden rounded-r-2xl border border-slate-800">
+                    <div class="bg-slate-900 px-4 py-2 text-[10px] font-bold text-slate-300 uppercase tracking-wider">
+                        Console Output
+                    </div>
+                    <div id="console-log" class="flex-grow p-4 console-output text-xs overflow-y-auto whitespace-pre-wrap"></div>
+                    <div class="p-2 bg-slate-900 text-[10px] text-slate-400 border-t border-slate-800 italic">
+                        ※ `console.log()` の結果が表示されます。
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-stone-100 border-t border-stone-200 py-8 text-center text-stone-500 text-xs">
+        <p>&copy; 2024 JS 100 Drills Dashboard - 実践的に学ぼう</p>
+    </footer>
+
+    <script>
+        const chaptersData = [
+            { id: 1, title: "第1章：変数とデータ型", count: 10, color: "rgba(59, 130, 246, 0.7)" },
+            { id: 2, title: "第2章：制御構文", count: 15, color: "rgba(16, 185, 129, 0.7)" },
+            { id: 3, title: "第3章：関数", count: 15, color: "rgba(245, 158, 11, 0.7)" },
+            { id: 4, title: "第4章：配列とオブジェクト", count: 20, color: "rgba(139, 92, 246, 0.7)" },
+            { id: 5, title: "第5章：DOM操作", count: 20, color: "rgba(236, 72, 153, 0.7)" },
+            { id: 6, title: "第6章：非同期処理とAPI連携", count: 20, color: "rgba(14, 165, 233, 0.7)" }
+        ];
+
+        const rawQuestions = [
+            [1, "letを使って変数 name を宣言し、自分の名前を代入してコンソールに表示せよ。"],
+            [1, "constを使って定数 BIRTH_YEAR を宣言し、誕生年を代入せよ。"],
+            [1, "let で宣言した変数に別の値を再代入し、エラーが起きないことを確認せよ。"],
+            [1, "const で宣言した定数に再代入を試み、エラーが出ることを確認せよ。"],
+            [1, "文字列「Hello」と「World」を結合して表示せよ。"],
+            [1, "テンプレートリテラルを使って「私の名前は ${name} です」と表示せよ。"],
+            [1, "数値型の変数 a と b を作り、四則演算の結果をすべて表示せよ。"],
+            [1, "typeof 演算子を使って、数値、文字列、ブール値の型を確認せよ。"],
+            [1, "null と undefined の違いを調べ、それぞれを変数に代入せよ。"],
+            [1, "文字列を数値に変換する（Number()）方法を記述せよ。"],
+            [2, "if文を使い、数値が10以上なら「大きい」、未満なら「小さい」と表示せよ。"],
+            [2, "比較演算子 == と === の違いを説明せよ。"],
+            [2, "論理演算子 &&（かつ）を使い、2つの条件が両方正しい時に処理を実行せよ。"],
+            [2, "論理演算子 ||（または）を使い、どちらかの条件が正しい時に処理を実行せよ。"],
+            [2, "switch文を使って、曜日に応じたメッセージを表示せよ。"],
+            [2, "for文を使い、0から10までをコンソールに出力せよ。"],
+            [2, "while文を使い、5から1までカウントダウンせよ。"],
+            [2, "for文の中で if を使い、偶数だけを表示せよ。"],
+            [2, "break を使って、ループの途中で処理を終了させよ。"],
+            [2, "continue を使って、特定の回だけ処理をスキップせよ。"],
+            [2, "1から30までループし、3の倍数なら「Fizz」、5なら「Buzz」、両方なら「FizzBuzz」を表示せよ。"],
+            [2, "2重の for 文を使い、九九の表をコンソールに作成せよ。"],
+            [2, "三項演算子を使って、1行で条件分岐を書け。"],
+            [2, "isFinite を使って、入力が数値かどうか判定せよ。"],
+            [2, "ユーザーに prompt で入力を求め、その内容を表示せよ。"],
+            [3, "2つの引数を足して返す関数 sum を定義せよ。"],
+            [3, "名前を受け取って挨拶を返す関数を定義せよ。"],
+            [3, "アロー関数を使って、26番の関数を書き換えよ。"],
+            [3, "引数のデフォルト値を設定した関数を作成せよ。"],
+            [3, "関数の中で定義した変数が、外からアクセスできないことを確認せよ（スコープ）。"],
+            [3, "無名関数を変数に代入して実行せよ。"],
+            [3, "与えられた数値が「偶数ならtrue」を返す関数を作成せよ。"],
+            [3, "配列を引数に取り、その合計値を返す関数を作成せよ。"],
+            [3, "コールバック関数（関数を引数に取る関数）を作成せよ。"],
+            [3, "setTimeout を使って、2秒後に関数を実行せよ。"],
+            [3, "高階関数（関数を返す関数）の概念を調べ、簡単な例を書け。"],
+            [3, "再帰関数（自分自身を呼ぶ関数）を使って、階乗（5!など）を計算せよ。"],
+            [3, "オブジェクトのプロパティとして関数を定義せよ（メソッド）。"],
+            [3, "引数にオブジェクトを渡し、分割代入を使って受け取れ。"],
+            [3, "数値の配列を受け取り、すべてを2倍にした新しい配列を返す関数を作れ。"],
+            [4, "好きな食べ物3つを入れた配列を作成せよ。"],
+            [4, "配列の2番目の要素を書き換えよ。"],
+            [4, "push を使って配列の末尾に要素を追加せよ。"],
+            [4, "pop を使って配列の末尾を削除せよ。"],
+            [4, "unshift と shift を使って先頭の要素を操作せよ。"],
+            [4, "forEach を使って配列の全要素を表示せよ。"],
+            [4, "map を使って配列の各要素を加工した新しい配列を作れ。"],
+            [4, "filter を使って、条件に合う要素だけを抽出せよ。"],
+            [4, "find を使って、特定の条件に合う最初の要素を探せ。"],
+            [4, "includes を使って、配列に特定の要素が含まれるか判定せよ。"],
+            [4, "配列を join を使ってカンマ区切りの文字列に変換せよ。"],
+            [4, "オブジェクト person を作り、名前と年齢をプロパティに持たせよ。"],
+            [4, "オブジェクトの値にアクセスする2つの方法（. と []）を書け。"],
+            [4, "オブジェクトに新しいプロパティを追加せよ。"],
+            [4, "Object.keys() を使って、オブジェクトのキー一覧を取得せよ。"],
+            [4, "オブジェクトの配列（名簿データなど）を作成せよ。"],
+            [4, "配列の中から、年齢が20歳以上のオブジェクトだけを抽出せよ。"],
+            [4, "splice を使って配列の途中の要素を削除せよ。"],
+            [4, "スプレッド構文（...）を使って配列をコピーせよ。"],
+            [4, "スプレッド構文を使って2つのオブジェクトを結合せよ。"],
+            [5, "getElementById で要素を取得し、コンソールに出せ。"],
+            [5, "querySelector で特定のクラスを持つ要素を取得せよ。"],
+            [5, "ボタンをクリックした時にメッセージを表示するイベントを設定せよ。"],
+            [5, "textContent を使って、HTMLの文字を書き換えよ。"],
+            [5, "style プロパティを使って、文字の色を赤に変えよ。"],
+            [5, "classList.add を使って、CSSクラスを動的に追加せよ。"],
+            [5, "createElement で新しい div を作成せよ。"],
+            [5, "appendChild で作成した要素を画面に追加せよ。"],
+            [5, "remove を使って要素を削除せよ。"],
+            [5, "入力フォームの値（value）を取得し、画面に表示せよ。"],
+            [5, "複数のボタンすべてに同じクリックイベントを設定せよ（ループ利用）。"],
+            [5, "addEventListener の mouseover と mouseout を使え。"],
+            [5, "フォームの submit イベントで、ページ遷移を阻止（preventDefault）せよ。"],
+            [5, "キーボードのキーが押された時に、どのキーか判定せよ。"],
+            [5, "innerHTML と textContent のセキュリティ上の違いを説明せよ。"],
+            [5, "チェックボックスの状態（オン/オフ）を取得せよ。"],
+            [5, "setInterval を使って、1秒ごとにカウントアップするタイマーを作れ。"],
+            [5, "画像の src 属性を書き換えて、画像を変更せよ。"],
+            [5, "要素の表示・非表示を切り替える（トグル）機能を作れ。"],
+            [5, "画面の一番下までスクロールしたことを検知せよ。"],
+            [6, "Promise の resolve と reject の役割を説明せよ。"],
+            [6, "then と catch を使って非同期処理の結果を受け取れ。"],
+            [6, "async / await を使って、同期処理のように非同期を書け。"],
+            [6, "fetch を使って JSONPlaceholder からデータを取れ。"],
+            [6, "取得したデータを JSON 形式に変換せよ。"],
+            [6, "取得した配列データの最初の1件のタイトルを表示せよ。"],
+            [6, "APIから取得したデータを、リストとして表示せよ。"],
+            [6, "API取得中に「読み込み中...」という文字を画面に出せ。"],
+            [6, "try...catch を使って、エラーハンドリングを行え。"],
+            [6, "ボタンを押した時だけ API 通信が走るようにせよ。"],
+            [6, "郵便番号APIを使って、住所を表示する機能を作れ。"],
+            [6, "天気予報APIのドキュメントを読み、URLを構築せよ。"],
+            [6, "APIのクエリパラメータの意味を説明せよ。"],
+            [6, "POST メソッドを使ってデータを送信する fetch を書け。"],
+            [6, "localStorage にデータを保存し、消えないようにせよ。"],
+            [6, "保存したデータを API 通信の結果と組み合わせて表示せよ。"],
+            [6, "複数のAPIを同時に叩き、すべて終わるまで待機せよ。"],
+            [6, "デベロッパーツールの「ネットワークタブ」を確認せよ。"],
+            [6, "検索窓に入力したキーワードで画像検索APIを叩くアプリを作れ。"],
+            [6, "自分だけのオリジナルアプリを完成させよ。"]
+        ];
+
+        let questions = [];
+        let completedIds = new Set();
+        let currentFilter = 0;
+        let currentQuestionId = null;
+        let progressChartInstance = null;
+        let distributionChartInstance = null;
+
+        function init() {
+            rawQuestions.forEach((q, index) => {
+                questions.push({ id: index + 1, chapterId: q[0], text: q[1] });
+            });
+
+            const saved = localStorage.getItem('jsDrillsCompleted');
+            if (saved) completedIds = new Set(JSON.parse(saved));
+
+            renderFilters();
+            renderQuestions();
+            initCharts();
+            updateUIState();
+        }
+
+        // --- Core Functions ---
+        function toggleComplete(id) {
+            if (completedIds.has(id)) completedIds.delete(id);
+            else completedIds.add(id);
+            
+            saveProgress();
+            renderQuestions();
+            updateUIState();
+        }
+
+        function markCurrentAsComplete() {
+            if (currentQuestionId) toggleComplete(currentQuestionId);
+            updateEditorCompleteButton();
+        }
+
+        function saveProgress() {
+            localStorage.setItem('jsDrillsCompleted', JSON.stringify(Array.from(completedIds)));
+        }
+
+        function setFilter(chapterId) {
+            currentFilter = chapterId;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('bg-stone-800', 'text-white');
+                btn.classList.add('bg-stone-200', 'text-stone-700');
+            });
+            const activeBtn = document.getElementById(`filter-btn-${chapterId}`);
+            activeBtn.classList.add('bg-stone-800', 'text-white');
+            renderQuestions();
+        }
+
+        // --- Rendering ---
+        function renderFilters() {
+            const container = document.getElementById('filter-container');
+            const btns = [{id: 0, label: "すべて"}];
+            chaptersData.forEach(c => btns.push({id: c.id, label: `第${c.id}章`}));
+
+            btns.forEach(b => {
+                const btn = document.createElement('button');
+                btn.id = `filter-btn-${b.id}`;
+                btn.className = `filter-btn px-4 py-1.5 rounded-full text-xs font-bold transition-all ${b.id === 0 ? 'bg-stone-800 text-white' : 'bg-stone-200 text-stone-700 hover:bg-stone-300'}`;
+                btn.innerText = b.label;
+                btn.onclick = () => setFilter(b.id);
+                container.appendChild(btn);
+            });
+        }
+
+        function renderQuestions() {
+            const container = document.getElementById('questions-grid');
+            container.innerHTML = '';
+            const filtered = currentFilter === 0 ? questions : questions.filter(q => q.chapterId === currentFilter);
+
+            filtered.forEach(q => {
+                const isDone = completedIds.has(q.id);
+                const ch = chaptersData.find(c => c.id === q.chapterId);
+                const card = document.createElement('div');
+                card.className = `p-4 rounded-xl border flex flex-col justify-between transition-all ${isDone ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-stone-200 shadow-sm'}`;
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between mb-2">
+                            <span class="text-[10px] font-black uppercase text-stone-400">Q${q.id}</span>
+                            ${isDone ? '<span class="text-emerald-600 text-xs font-bold">DONE</span>' : ''}
+                        </div>
+                        <p class="text-stone-800 text-sm font-medium leading-relaxed mb-4">${q.text}</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="openEditor(${q.id})" class="text-xs bg-stone-100 hover:bg-stone-200 py-2 rounded font-bold border border-stone-200">練習する</button>
+                        <button onclick="toggleComplete(${q.id})" class="text-xs ${isDone ? 'bg-emerald-600 text-white' : 'bg-stone-800 text-white'} py-2 rounded font-bold">
+                            ${isDone ? '完了取消' : '完了！'}
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // --- Editor Engine ---
+        function openEditor(id) {
+            currentQuestionId = id;
+            const q = questions.find(item => item.id === id);
+            document.getElementById('modal-q-id').innerText = `Q${id}`;
+            document.getElementById('modal-q-title').innerText = q.text;
+            document.getElementById('js-input').value = `// Q${id}: ${q.text}\n\n`;
+            document.getElementById('console-log').innerText = "実行結果がここに表示されます...";
+            document.getElementById('editor-modal').classList.remove('hidden');
+            updateEditorCompleteButton();
+        }
+
+        function closeEditor() {
+            document.getElementById('editor-modal').classList.add('hidden');
+            currentQuestionId = null;
+        }
+
+        function updateEditorCompleteButton() {
+            const btn = document.getElementById('complete-shortcut-btn');
+            if (completedIds.has(currentQuestionId)) {
+                btn.innerText = "完了を取り消す";
+                btn.classList.add('bg-emerald-100', 'text-emerald-700');
+            } else {
+                btn.innerText = "完了にする";
+                btn.classList.remove('bg-emerald-100', 'text-emerald-700');
+            }
+        }
+
+        function runCode() {
+            const code = document.getElementById('js-input').value;
+            const consoleEl = document.getElementById('console-log');
+            consoleEl.innerText = "";
+            
+            // Redirect console.log
+            const logs = [];
+            const originalLog = console.log;
+            console.log = (...args) => {
+                logs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a, null, 2) : String(a)).join(' '));
+            };
+
+            try {
+                const runFunc = new Function(code);
+                runFunc();
+                consoleEl.innerText = logs.length > 0 ? logs.join('\n') : "(出力はありませんでした。console.logを使ってみてください)";
+            } catch (err) {
+                consoleEl.innerHTML = `<span class="text-rose-400 font-bold">Error:</span>\n${err.message}`;
+            } finally {
+                console.log = originalLog;
+            }
+        }
+
+        // --- Charts ---
+        function initCharts() {
+            const ctxProgress = document.getElementById('progressChart').getContext('2d');
+            progressChartInstance = new Chart(ctxProgress, {
+                type: 'doughnut',
+                data: {
+                    labels: ['完了', '未完了'],
+                    datasets: [{
+                        data: [0, 100],
+                        backgroundColor: ['#059669', '#e7e5e4'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '80%',
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            const ctxDist = document.getElementById('distributionChart').getContext('2d');
+            distributionChartInstance = new Chart(ctxDist, {
+                type: 'bar',
+                data: {
+                    labels: chaptersData.map(c => `第${c.id}章`),
+                    datasets: [{
+                        label: '問題数',
+                        data: chaptersData.map(c => c.count),
+                        backgroundColor: chaptersData.map(c => c.color),
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { borderDash: [2, 2] } },
+                        x: { grid: { display: false } }
+                    }
+                }
+            });
+        }
+
+        function updateUIState() {
+            const count = completedIds.size;
+            document.getElementById('header-count').innerText = count;
+            if (progressChartInstance) {
+                progressChartInstance.data.datasets[0].data = [count, 100 - count];
+                progressChartInstance.update();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
